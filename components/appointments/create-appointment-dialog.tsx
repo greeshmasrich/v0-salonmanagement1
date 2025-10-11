@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
@@ -18,13 +18,18 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Plus } from "lucide-react"
-import type { Service, User, Chair } from "@/lib/types"
+import type { Service, User } from "@/lib/types"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { MultiSelect, type MultiSelectOption } from "@/components/ui/multi-select"
+
+type Category = { id: string; name: string }
+type Subcategory = { id: string; category_id: string; name: string }
 
 interface CreateAppointmentDialogProps {
+  // ... existing props replaced: services list still accepted for compatibility
   services: Service[]
   staff: User[]
-  chairs: Chair[]
+  chairs: { id: string; chair_number: string }[]
   currentUser: User | null
 }
 
@@ -34,19 +39,57 @@ export function CreateAppointmentDialog({ services, staff, chairs, currentUser }
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
 
+  const [categories, setCategories] = useState<Category[]>([])
+  const [subcats, setSubcats] = useState<Subcategory[]>([])
+  const [selectedCategory, setSelectedCategory] = useState("")
+  const [selectedSubcat, setSelectedSubcat] = useState("")
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([])
+  const [preferredStaffIds, setPreferredStaffIds] = useState<string[]>([])
+
   const [formData, setFormData] = useState({
-    // when currentUser is a regular User, we use their id as customer
-    staff_id: "",
-    service_id: "",
     chair_id: "",
     appointment_date: "",
     start_time: "",
     notes: "",
-    // customer fields (used when current user is NOT a "User")
     customer_full_name: "",
     customer_email: "",
     customer_phone: "",
   })
+
+  useEffect(() => {
+    const run = async () => {
+      try {
+        const [catsRes, subRes] = await Promise.all([
+          fetch("/api/service-categories"),
+          fetch("/api/service-subcategories"),
+        ])
+        if (catsRes.ok) setCategories(await catsRes.json())
+        if (subRes.ok) setSubcats(await subRes.json())
+      } catch (e) {
+        // ignore
+      }
+    }
+    run()
+  }, [])
+
+  const serviceOptions: MultiSelectOption[] = useMemo(() => {
+    return services
+      .filter((s: any) => !selectedSubcat || s.subcategory_id === selectedSubcat)
+      .map((s: any) => ({
+        value: s.id,
+        label: `${s.name} • ₹${s.price} (${s.duration}m)`,
+        group: (subcats.find((sc) => sc.id === s.subcategory_id)?.name as string) || "Services",
+      }))
+  }, [services, subcats, selectedSubcat])
+
+  const staffOptions: MultiSelectOption[] = useMemo(() => {
+    return staff.map((u) => ({ value: u.id, label: u.full_name, group: u.role }))
+  }, [staff])
+
+  const filteredSubcats = useMemo(
+    () => subcats.filter((sc) => !selectedCategory || sc.category_id === selectedCategory),
+    [subcats, selectedCategory],
+  )
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -54,34 +97,21 @@ export function CreateAppointmentDialog({ services, staff, chairs, currentUser }
     setError(null)
 
     try {
-      // Get service duration to calculate end time
-      debugger
-      const service = services.find((s) => s.id == formData.service_id)
-      if (!service) throw new Error("Service not found")
-
-      // Calculate end time from start_time + duration
-      const [hours, minutes] = formData.start_time.split(":").map(Number)
-      const startMinutes = hours * 60 + minutes
-      const endMinutes = startMinutes + service.duration
-      const endHours = Math.floor(endMinutes / 60)
-      const endMins = endMinutes % 60
-      const end_time = `${String(endHours).padStart(2, "0")}:${String(endMins).padStart(2, "0")}`
+      if (selectedServiceIds.length === 0) throw new Error("Select at least one service")
+      if (!formData.appointment_date || !formData.start_time) throw new Error("Select date and start time")
 
       const body: any = {
-        staff_id: formData.staff_id,
-        service_id: formData.service_id,
-        chair_id: formData.chair_id && formData.chair_id !== "none" ? formData.chair_id : null, // handle "none"
+        chair_id: formData.chair_id && formData.chair_id !== "none" ? formData.chair_id : null,
         appointment_date: formData.appointment_date,
         start_time: formData.start_time,
-        end_time,
-        status: "Pending",
         notes: formData.notes || null,
+        service_ids: selectedServiceIds,
+        preferred_staff_ids: preferredStaffIds,
       }
 
       if (currentUser?.role === "User") {
         body.customer_id = currentUser.id
       } else {
-        // Require at least name and one contact field
         if (!formData.customer_full_name || (!formData.customer_email && !formData.customer_phone)) {
           throw new Error("Please provide customer name and at least email or phone")
         }
@@ -106,8 +136,6 @@ export function CreateAppointmentDialog({ services, staff, chairs, currentUser }
       setOpen(false)
       router.refresh()
       setFormData({
-        staff_id: "",
-        service_id: "",
         chair_id: "",
         appointment_date: "",
         start_time: "",
@@ -116,6 +144,10 @@ export function CreateAppointmentDialog({ services, staff, chairs, currentUser }
         customer_email: "",
         customer_phone: "",
       })
+      setSelectedCategory("")
+      setSelectedSubcat("")
+      setSelectedServiceIds([])
+      setPreferredStaffIds([])
     } catch (err: any) {
       setError(err.message || "Failed to create appointment")
     } finally {
@@ -137,7 +169,8 @@ export function CreateAppointmentDialog({ services, staff, chairs, currentUser }
         <DialogHeader>
           <DialogTitle>Create New Appointment</DialogTitle>
           <DialogDescription>
-            Schedule a new appointment. Customers are created automatically if needed.
+            Select services via Category → Subcategory, choose preferred staff, and we’ll auto-create customers if
+            needed.
           </DialogDescription>
         </DialogHeader>
 
@@ -182,56 +215,86 @@ export function CreateAppointmentDialog({ services, staff, chairs, currentUser }
             </div>
           )}
 
-          <div className="space-y-2">
-            <Label htmlFor="service_id">Service</Label>
-            <Select
-              value={formData.service_id}
-              onValueChange={(value) => setFormData({ ...formData, service_id: value })}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select service" />
-              </SelectTrigger>
-              <SelectContent>
-                {services.map((service) => (
-                  <SelectItem key={service.id} value={service.id}>
-                    {service.name} - ₹{service.price} ({service.duration} min)
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label>Category</Label>
+              <Select
+                value={selectedCategory}
+                onValueChange={(v) => {
+                  setSelectedCategory(v)
+                  setSelectedSubcat("")
+                  setSelectedServiceIds([])
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Subcategory</Label>
+              <Select
+                value={selectedSubcat}
+                onValueChange={(v) => {
+                  setSelectedSubcat(v)
+                  setSelectedServiceIds([])
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select subcategory" />
+                </SelectTrigger>
+                <SelectContent>
+                  {filteredSubcats.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Chair (Optional)</Label>
+              <Select value={formData.chair_id} onValueChange={(v) => setFormData({ ...formData, chair_id: v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select chair" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No chair assigned</SelectItem>
+                  {chairs.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.chair_number}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="staff_id">Staff Member</Label>
-            <Select value={formData.staff_id} onValueChange={(value) => setFormData({ ...formData, staff_id: value })}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select staff" />
-              </SelectTrigger>
-              <SelectContent>
-                {staff.map((member) => (
-                  <SelectItem key={member.id} value={member.id}>
-                    {member.full_name} ({member.role})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label>Services</Label>
+            <MultiSelect
+              options={serviceOptions}
+              value={selectedServiceIds}
+              onChange={setSelectedServiceIds}
+              placeholder="Pick one or more services"
+            />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="chair_id">Chair (Optional)</Label>
-            <Select value={formData.chair_id} onValueChange={(value) => setFormData({ ...formData, chair_id: value })}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select chair" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No chair assigned</SelectItem>
-                {chairs.map((chair) => (
-                  <SelectItem key={chair.id} value={chair.id}>
-                    {chair.chair_number}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label>Preferred Staff</Label>
+            <MultiSelect
+              options={staffOptions}
+              value={preferredStaffIds}
+              onChange={setPreferredStaffIds}
+              placeholder="Select preferred staff (optional)"
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-4">

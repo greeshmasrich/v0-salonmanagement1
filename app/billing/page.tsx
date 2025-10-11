@@ -12,24 +12,18 @@ export default async function BillingPage() {
     redirect("/auth/login")
   }
 
-  // Fetch billing records from API
-  const billingRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ""}/api/billing`, {
-    headers: { cookie: "" }, // pass cookies if needed for auth
-    cache: "no-store",
-  })
-  const billingRecords = await billingRes.json()
-
-  // Fetch unbilled appointments from API
-  const unbilledRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ""}/api/appointments/unbilled`, {
-    headers: { cookie: "" },
-    cache: "no-store",
-  })
-  const unbilledAppointments = await unbilledRes.json()
+  const base = process.env.NEXT_PUBLIC_BASE_URL || ""
+  const [billingRes, unbilledRes] = await Promise.all([
+    fetch(`${base}/api/billing`, { headers: { cookie: "" }, cache: "no-store" }),
+    fetch(`${base}/api/billing/unbilled-appointments`, { headers: { cookie: "" }, cache: "no-store" }),
+  ])
+  const billingRecords = billingRes.ok ? await billingRes.json() : []
+  const unbilledAppointments = unbilledRes.ok ? await unbilledRes.json() : []
 
   return (
     <div className="flex min-h-screen flex-col">
-      {/* <DashboardHeader user={user} /> */}
-      {/* <main className="flex-1 space-y-6 p-6 md:p-8">
+      <DashboardHeader user={user} />
+      <main className="flex-1 space-y-6 p-6 md:p-8">
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold tracking-tight">Billing</h1>
           {(user?.role === "SuperAdmin" || user?.role === "Admin" || user?.role === "Staff") && (
@@ -40,7 +34,7 @@ export default async function BillingPage() {
         <BillingStats />
 
         <BillingList billingRecords={billingRecords || []} currentUser={user} />
-      </main> */}
+      </main>
     </div>
   )
 }

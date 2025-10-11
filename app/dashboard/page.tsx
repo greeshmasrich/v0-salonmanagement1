@@ -6,6 +6,8 @@ import { PopularServicesChart } from "@/components/dashboard/popular-services-ch
 import { RecentAppointments } from "@/components/dashboard/recent-appointments"
 import { DashboardHeader } from "@/components/dashboard/dashboard-header"
 import { getAuthUser } from "@/lib/db/auth"
+import { StaffTodayServices } from "@/components/staff/today-services"
+import { StaffServicesManager } from "@/components/staff/staff-services-manager"
 
 export default async function DashboardPage() {
   const user = await getAuthUser()
@@ -22,17 +24,26 @@ export default async function DashboardPage() {
           <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
         </div>
 
-        <DashboardStats />
+        {user.role === "Staff" && (
+          <div className="grid gap-6">
+            <StaffTodayServices />
+            <StaffServicesManager />
+          </div>
+        )}
 
-        <div className="grid gap-6 md:grid-cols-2">
-          <RevenueChart />
-          <AppointmentsChart />
-        </div>
-
-        <div className="grid gap-6 md:grid-cols-2">
-          <PopularServicesChart />
-          <RecentAppointments />
-        </div>
+        {user.role !== "Staff" && (
+          <>
+            <DashboardStats />
+            <div className="grid gap-6 md:grid-cols-2">
+              <RevenueChart />
+              <AppointmentsChart />
+            </div>
+            <div className="grid gap-6 md:grid-cols-2">
+              <PopularServicesChart />
+              <RecentAppointments />
+            </div>
+          </>
+        )}
       </main>
     </div>
   )

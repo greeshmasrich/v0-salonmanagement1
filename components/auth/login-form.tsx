@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -11,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { MultiSelect, type MultiSelectOption } from "@/components/ui/multi-select"
 
 export function LoginForm() {
   const [email, setEmail] = useState("")
@@ -24,9 +24,36 @@ export function LoginForm() {
   const [signupName, setSignupName] = useState("")
   const [signupPhone, setSignupPhone] = useState("")
   const [signupRole, setSignupRole] = useState<"SuperAdmin" | "Admin" | "Staff" | "User">("User")
+  const [designations, setDesignations] = useState<{ id: string; name: string }[]>([])
+  const [services, setServices] = useState<any[]>([])
+  const [subcats, setSubcats] = useState<any[]>([])
+  const [selectedDesignation, setSelectedDesignation] = useState<string>("")
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([])
   const [signupLoading, setSignupLoading] = useState(false)
   const [signupError, setSignupError] = useState<string | null>(null)
   const [signupSuccess, setSignupSuccess] = useState(false)
+
+  useState(() => {
+    ;(async () => {
+      try {
+        const [d, s, sc] = await Promise.all([
+          fetch("/api/designations"),
+          fetch("/api/services"),
+          fetch("/api/service-subcategories"),
+        ])
+        if (d.ok) setDesignations(await d.json())
+        if (s.ok) setServices(await s.json())
+        if (sc.ok) setSubcats(await sc.json())
+      } catch {}
+    })()
+    return undefined
+  })
+
+  const serviceOptions: MultiSelectOption[] = services.map((svc: any) => ({
+    value: svc.id,
+    label: `${svc.name} • ₹${svc.price} (${svc.duration}m)`,
+    group: (subcats.find((sc: any) => sc.id === svc.subcategory_id)?.name as string) || "Services",
+  }))
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -71,6 +98,8 @@ export function LoginForm() {
           full_name: signupName,
           phone: signupPhone,
           role: signupRole,
+          designation_id: signupRole === "Staff" && selectedDesignation ? selectedDesignation : undefined,
+          service_ids: signupRole === "Staff" ? selectedServiceIds : undefined,
         }),
       })
 
@@ -86,8 +115,9 @@ export function LoginForm() {
       setSignupName("")
       setSignupPhone("")
       setSignupRole("User")
+      setSelectedDesignation("")
+      setSelectedServiceIds([])
 
-      // Auto login after signup
       setTimeout(() => {
         router.push("/dashboard")
         router.refresh()
@@ -226,6 +256,36 @@ export function LoginForm() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {signupRole === "Staff" && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="designation">Designation</Label>
+                    <Select value={selectedDesignation} onValueChange={setSelectedDesignation}>
+                      <SelectTrigger id="designation">
+                        <SelectValue placeholder="Select designation" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {designations.map((d) => (
+                          <SelectItem key={d.id} value={d.id}>
+                            {d.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Services you can perform</Label>
+                    <MultiSelect
+                      options={serviceOptions}
+                      value={selectedServiceIds}
+                      onChange={setSelectedServiceIds}
+                      placeholder="Select one or more services"
+                    />
+                  </div>
+                </>
+              )}
 
               <Button type="submit" className="w-full" disabled={signupLoading || signupSuccess}>
                 {signupLoading ? "Creating account..." : "Create Account"}

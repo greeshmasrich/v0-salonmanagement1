@@ -20,12 +20,14 @@ export default async function AppointmentsPage() {
       c.id as customer_id, c.full_name as customer_name, c.email as customer_email, c.phone as customer_phone,
       st.id as staff_id, st.full_name as staff_name,
       s.id as service_id, s.name as service_name, s.duration as service_duration, s.price as service_price,
-      ch.id as chair_id, ch.chair_number
+      ch.id as chair_id, ch.chair_number,
+      sc.id as subcategory_id, sc.name as subcategory_name
     FROM appointments a
     LEFT JOIN users c ON a.customer_id = c.id
     LEFT JOIN users st ON a.staff_id = st.id
     LEFT JOIN services s ON a.service_id = s.id
     LEFT JOIN chairs ch ON a.chair_id = ch.id
+    LEFT JOIN service_subcategories sc ON s.subcategory_id = sc.id
     ORDER BY a.appointment_date ASC, a.start_time ASC
   `)
 
@@ -38,6 +40,14 @@ export default async function AppointmentsPage() {
   // Fetch chairs
   const chairs = await query("SELECT * FROM chairs WHERE is_active = 1")
 
+  // Fetch hierarchy for cascading selects in dialog (client also fetches but SSR improves UX)
+  const categories = await query("SELECT * FROM service_categories WHERE is_active = 1 ORDER BY name ASC").catch(
+    () => [],
+  )
+  const subcategories = await query("SELECT * FROM service_subcategories WHERE is_active = 1 ORDER BY name ASC").catch(
+    () => [],
+  )
+
   return (
     <div className="flex min-h-screen flex-col">
       <DashboardHeader user={user} />
@@ -49,6 +59,8 @@ export default async function AppointmentsPage() {
             staff={staff || []}
             chairs={chairs || []}
             currentUser={user}
+            categories={categories || []}
+            subcategories={subcategories || []}
           />
         </div>
 

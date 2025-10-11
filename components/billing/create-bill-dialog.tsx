@@ -1,8 +1,7 @@
 "use client"
 
 import type React from "react"
-
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
@@ -18,7 +17,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Plus } from "lucide-react"
-import type { Appointment } from "@/lib/types"
+import type { Appointment, AppointmentServiceItem } from "@/lib/types"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface CreateBillDialogProps {
@@ -39,10 +38,32 @@ export function CreateBillDialog({ unbilledAppointments }: CreateBillDialogProps
     notes: "",
   })
 
+  const [items, setItems] = useState<AppointmentServiceItem[]>([])
+
   const selectedAppointment = unbilledAppointments.find((apt) => apt.id === formData.appointment_id)
-  const servicePrice = selectedAppointment ? Number((selectedAppointment.service as any)?.price || 0) : 0
+
+  useEffect(() => {
+    const run = async () => {
+      setItems([])
+      if (!formData.appointment_id) return
+      try {
+        const res = await fetch(
+          `/api/appointment-services?appointment_id=${encodeURIComponent(formData.appointment_id)}`,
+        )
+        if (res.ok) {
+          const data = await res.json()
+          setItems(Array.isArray(data) ? data : [])
+        }
+      } catch {}
+    }
+    run()
+  }, [formData.appointment_id])
+
+  const completedItems = items.filter((it) => it.status === "Completed")
+  const baseItems = completedItems.length > 0 ? completedItems : items
+  const subtotal = baseItems.reduce((sum, it) => sum + Number(it.price ?? (it as any)?.service?.price ?? 0), 0)
   const discountAmount = Number(formData.discount_amount) || 0
-  const finalAmount = Math.max(0, servicePrice - discountAmount)
+  const finalAmount = Math.max(0, subtotal - discountAmount)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -58,7 +79,7 @@ export function CreateBillDialog({ unbilledAppointments }: CreateBillDialogProps
         body: JSON.stringify({
           appointment_id: formData.appointment_id,
           customer_id: selectedAppointment.customer_id,
-          total_amount: servicePrice,
+          total_amount: subtotal,
           discount_amount: discountAmount,
           final_amount: finalAmount,
           payment_status: formData.payment_status,
@@ -131,19 +152,55 @@ export function CreateBillDialog({ unbilledAppointments }: CreateBillDialogProps
           </div>
 
           {selectedAppointment && (
-            <div className="rounded-lg border p-4 space-y-2 bg-muted/50">
+            <div className="rounded-lg border p-4 space-y-3 bg-muted/50">
+              <div className="space-y-2">
+                <div className="text-sm font-medium">Services</div>
+                <div className="rounded-md border">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left">
+                        <th className="p-2">Service</th>
+                        <th className="p-2">Assigned Staff</th>
+                        <th className="p-2 w-24 text-right">Price (₹)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {baseItems.map((it) => (
+                        <tr key={it.id} className="border-t">
+                          <td className="p-2">{(it as any)?.service?.name || "-"}</td>
+                          <td className="p-2">{(it as any)?.assigned_staff?.full_name || "-"}</td>
+                          <td className="p-2 text-right">
+                            {Number(it.price ?? (it as any)?.service?.price ?? 0).toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                      {baseItems.length === 0 && (
+                        <tr>
+                          <td className="p-2 text-muted-foreground" colSpan={3}>
+                            No services found for this appointment
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t">
+                        <td className="p-2" colSpan={2}>
+                          Subtotal
+                        </td>
+                        <td className="p-2 text-right">₹{subtotal.toFixed(2)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div>
                   <span className="font-medium">Customer:</span> {(selectedAppointment.customer as any)?.full_name}
                 </div>
                 <div>
-                  <span className="font-medium">Service:</span> {(selectedAppointment.service as any)?.name}
-                </div>
-                <div>
-                  <span className="font-medium">Staff:</span> {(selectedAppointment.staff as any)?.full_name}
-                </div>
-                <div>
-                  <span className="font-medium">Service Price:</span> ₹{servicePrice.toFixed(2)}
+                  <span className="font-medium">Appointment:</span>{" "}
+                  {new Date(selectedAppointment.appointment_date).toLocaleDateString()} {selectedAppointment.start_time}
                 </div>
               </div>
             </div>

@@ -2,6 +2,7 @@ export type UserRole = "SuperAdmin" | "Admin" | "Staff" | "User"
 export type AppointmentStatus = "Pending" | "Confirmed" | "Completed" | "Cancelled" | "No-Show"
 export type PaymentStatus = "Pending" | "Paid" | "Refunded" | "Failed"
 export type PaymentMethod = "Cash" | "Card" | "UPI" | "Wallet"
+export type AppointmentServiceStatus = "Pending" | "Ongoing" | "Completed" | "Cancelled"
 
 export interface User {
   id: string
@@ -11,6 +12,7 @@ export interface User {
   role: UserRole
   created_at: string
   updated_at: string
+  designation_id?: string | null
 }
 
 export interface Service {
@@ -22,6 +24,31 @@ export interface Service {
   is_active: boolean
   created_at: string
   updated_at: string
+}
+
+export interface ServiceCategory {
+  id: string
+  name: string
+  description?: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface ServiceSubcategory {
+  id: string
+  category_id: string
+  name: string
+  description?: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface StaffService {
+  staff_id: string
+  service_id: string
+  created_at: string
 }
 
 export interface Chair {
@@ -60,6 +87,22 @@ export interface Appointment {
   staff?: User
   service?: Service
   chair?: Chair
+  services?: AppointmentServiceItem[]
+}
+
+export interface AppointmentServiceItem {
+  id: string
+  appointment_id: string
+  service_id: string
+  assigned_staff_id?: string | null
+  status: AppointmentServiceStatus
+  price?: number | null
+  duration?: number | null
+  notes?: string
+  created_at: string
+  updated_at: string
+  service?: Service
+  assigned_staff?: User
 }
 
 export interface Billing {
@@ -77,4 +120,12 @@ export interface Billing {
   updated_at: string
   appointment?: Appointment
   customer?: User
+}
+
+export interface Designation {
+  id: string
+  name: string
+  description?: string
+  created_at: string
+  updated_at: string
 }
