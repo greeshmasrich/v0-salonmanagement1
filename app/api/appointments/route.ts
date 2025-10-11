@@ -35,10 +35,10 @@ export async function GET(request: NextRequest) {
 // POST /api/appointments - Create new appointment
 export async function POST(request: NextRequest) {
   try {
-    const user = await verifyAuth(request)
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    // const user = await verifyAuth(request)
+    // if (!user) {
+    //   return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    // }
 
     const body = await request.json()
     let {

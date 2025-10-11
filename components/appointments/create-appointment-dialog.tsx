@@ -55,7 +55,8 @@ export function CreateAppointmentDialog({ services, staff, chairs, currentUser }
 
     try {
       // Get service duration to calculate end time
-      const service = services.find((s) => s.id === formData.service_id)
+      debugger
+      const service = services.find((s) => s.id == formData.service_id)
       if (!service) throw new Error("Service not found")
 
       // Calculate end time from start_time + duration
